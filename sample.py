@@ -7,10 +7,10 @@ from pathlib import Path
 from haystack.components.builders import PromptBuilder
 from haystack.components.retrievers.in_memory import InMemoryEmbeddingRetriever
 
-from converter import ConverterFactory
-from retriever import RetrieverManager
-from generator import GeneratorFactory, GeneratorManager, GeneratorConfig
-from embedder import EmbedderFactory
+from rag.converter import ConverterFactory
+from rag.retriever import RetrieverManager
+from rag.generator import GeneratorFactory, GeneratorManager, GeneratorConfig
+from rag.embedder import EmbedderFactory
 
 
 generator_manager = GeneratorManager()
