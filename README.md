@@ -2,6 +2,12 @@
 
 Welcome to the haystack-rag project! This toolkit is designed to facilitate the implementation of Retrieval-Augmented Generation (RAG) using the **Haystack 2.x** framework. It provides a set of tools and utilities to streamline the process of building RAG-based applications.
 
+
+# The Fun (and Frustration) of Rewriting RAG with Haystack
+```
+Let’s be honest: rewriting a RAG system with Haystack can feel like herding cats! Between juggling document retrieval, embeddings, and generative models, it’s a bit of a circus act. But fear not! With a sprinkle of patience and a dash of creativity, you’ll turn that chaos into a masterpiece. Just remember: every great RAG journey begins with a single query!
+```
+
 ## Table of Contents
 
 - [haystack-rag](#haystack-rag)
