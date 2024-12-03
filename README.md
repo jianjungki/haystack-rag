@@ -68,6 +68,7 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 ## Thanks to
 
 - [Haystack](https://haystack.deepset.ai/) for providing a powerful framework for building RAG applications.
+- [Chainlit](https://docs.chainlit.io/) for chat interface with pipeline analyze and monitor
 - All contributors and users for their support and feedback.
 
 ---
