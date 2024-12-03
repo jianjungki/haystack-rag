@@ -7,18 +7,18 @@ from pathlib import Path
 from haystack.components.builders import PromptBuilder
 from haystack.components.retrievers.in_memory import InMemoryEmbeddingRetriever
 
-from converter import ConverterFactory
-from retriever import RetrieverManager
-from generator import GeneratorManager, GeneratorConfig
-from embedder import EmbedderFactory
+from .converter import ConverterManager
+from .retriever import RetrieverManager
+from .generator import GeneratorManager, GeneratorConfig
+from .embedder import EmbedderManager
 
 
 class RAGPipeline:
-    def __init__(self, embedder_type, generator_type, embedding_model, llm_model, api_key=None, base_url=None):
+    def __init__(self, embedding_provider, embedding_model, llm_provider, llm_model, api_key=None, base_url=None):
         self.document_store = InMemoryDocumentStore()
 
-        embedder = EmbedderFactory.create_embedder(
-            embedder_type, "document", embedding_model=embedding_model)
+        embedder = EmbedderManager.get_embedder(
+            embedding_provider, "document", embedding_model=embedding_model)
 
         llm_config = GeneratorConfig(
             model_name=llm_model,
@@ -34,11 +34,11 @@ class RAGPipeline:
                 temperature=0.5,
                 max_tokens=4096
             )
-        generator = GeneratorManager().get_generator(generator_type, False, llm_config)
+        generator = GeneratorManager().get_generator(llm_provider, False, llm_config)
         print(generator)
         retriever = RetrieverManager().get_retriever(
             "embedding", self.document_store, embedder)
-        converter = ConverterFactory.get_converter("doc9338.pdf")
+        converter = ConverterManager().get_converter(Path("doc9338.pdf").suffix)
 
         # Initialize the pipeline
         self.indexing = Pipeline()
@@ -80,8 +80,8 @@ class RAGPipeline:
         self.retriever = InMemoryEmbeddingRetriever(
             document_store=self.document_store)
 
-        text_embedder = EmbedderFactory.create_embedder(
-            embedder_type, "text", embedding_model=embedding_model)
+        text_embedder = EmbedderManager().get_embedder(
+            embedding_provider, "text", embedding_model=embedding_model)
         self.text_embedder = text_embedder
 
         self.basic_rag_pipeline = Pipeline()
