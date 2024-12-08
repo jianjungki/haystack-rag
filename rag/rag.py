@@ -17,8 +17,8 @@ class RAGPipeline:
     def __init__(self, embedding_provider, embedding_model, llm_provider, llm_model, api_key=None, base_url=None):
         self.document_store = InMemoryDocumentStore()
 
-        embedder = EmbedderManager.get_embedder(
-            embedding_provider, "document", embedding_model=embedding_model)
+        embedder = EmbedderManager().get_embedder(
+            provider=embedding_provider, embedder_type="document", embedding_model=embedding_model)
 
         llm_config = GeneratorConfig(
             model_name=llm_model,
@@ -38,7 +38,7 @@ class RAGPipeline:
         print(generator)
         retriever = RetrieverManager().get_retriever(
             "embedding", self.document_store, embedder)
-        converter = ConverterManager().get_converter(Path("doc9338.pdf").suffix)
+        converter = ConverterManager().get_converter("0038-WS2021-D30-MSG-1537.txt")
 
         # Initialize the pipeline
         self.indexing = Pipeline()
@@ -46,7 +46,7 @@ class RAGPipeline:
             "converter", converter)
         self.indexing.add_component("cleaner", DocumentCleaner())
         self.indexing.add_component("splitter", DocumentSplitter(
-            split_by="word", split_length=150, split_overlap=50))
+            split_by="sentence", split_length=1))
 
         self.indexing.add_component("doc_embedder", embedder)
         self.indexing.add_component(
@@ -60,7 +60,100 @@ class RAGPipeline:
         self.indexing.draw("indexing.png")
         Image(filename='indexing.png')
 
-        self.indexing.run({"converter": {"sources": [Path("doc9338.pdf")]}})
+        self.indexing.run(
+            {"converter": {"sources": [Path("0038-WS2021-D30-MSG-1537.txt")]}})
+
+        template = """
+        Given the following information, answer the question.
+
+        Context:
+        {% for document in documents %}
+            {{ document.content }}
+        {% endfor %}
+
+        Question: {{question}}
+        Answer:
+        """
+        self.prompt_builder = PromptBuilder(template=template)
+
+        self.generator = generator
+
+        self.retriever = InMemoryEmbeddingRetriever(
+            document_store=self.document_store)
+
+        text_embedder = EmbedderManager().get_embedder(
+            embedding_provider, "text", embedding_model=embedding_model)
+        self.text_embedder = text_embedder
+
+        self.basic_rag_pipeline = Pipeline()
+        self.basic_rag_pipeline.add_component(
+            "text_embedder", self.text_embedder)
+        self.basic_rag_pipeline.add_component("retriever", retriever)
+        self.basic_rag_pipeline.add_component(
+            "prompt_builder", self.prompt_builder)
+        self.basic_rag_pipeline.add_component("llm", generator)
+
+        self.basic_rag_pipeline.connect("text_embedder.embedding",
+                                        "retriever.query_embedding")
+        self.basic_rag_pipeline.connect(
+            "retriever", "prompt_builder.documents")
+        self.basic_rag_pipeline.connect("prompt_builder", "llm")
+
+    def run(self, question):
+        response = self.basic_rag_pipeline.run(
+            {"text_embedder": {"text": question}, "prompt_builder": {"question": question}})
+        return response["llm"]["replies"][0]
+
+
+class RAGChatPipeline:
+    def __init__(self, embedding_provider, embedding_model, llm_provider, llm_model, api_key=None, base_url=None):
+        self.document_store = InMemoryDocumentStore()
+
+        embedder = EmbedderManager().get_embedder(
+            provider=embedding_provider, embedder_type="document", embedding_model=embedding_model)
+
+        llm_config = GeneratorConfig(
+            model_name=llm_model,
+            api_key=api_key,
+            temperature=0.5,
+            max_tokens=4096
+        )
+        if base_url is not None:
+            llm_config = GeneratorConfig(
+                api_base_url=base_url,
+                model_name=llm_model,
+                api_key=api_key,
+                temperature=0.5,
+                max_tokens=4096
+            )
+        generator = GeneratorManager().get_generator(llm_provider, False, llm_config)
+        print(generator)
+        retriever = RetrieverManager().get_retriever(
+            "embedding", self.document_store, embedder)
+        converter = ConverterManager().get_converter("0038-WS2021-D30-MSG-1537.txt")
+
+        # Initialize the pipeline
+        self.indexing = Pipeline()
+        self.indexing.add_component(
+            "converter", converter)
+        self.indexing.add_component("cleaner", DocumentCleaner())
+        self.indexing.add_component("splitter", DocumentSplitter(
+            split_by="sentence", split_length=1))
+
+        self.indexing.add_component("doc_embedder", embedder)
+        self.indexing.add_component(
+            "writer", DocumentWriter(self.document_store))
+
+        self.indexing.connect("converter", "cleaner")
+        self.indexing.connect("cleaner", "splitter")
+        self.indexing.connect("splitter", "doc_embedder")
+        self.indexing.connect("doc_embedder", "writer")
+
+        self.indexing.draw("indexing.png")
+        Image(filename='indexing.png')
+
+        self.indexing.run(
+            {"converter": {"sources": [Path("0038-WS2021-D30-MSG-1537.txt")]}})
 
         template = """
         Given the following information, answer the question.

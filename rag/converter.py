@@ -37,72 +37,81 @@ from haystack.components.converters import AzureOCRDocumentConverter
 from haystack_integrations.components.converters.unstructured import UnstructuredFileConverter
 
 
-class ConverterFactory:
-    """Factory class to create appropriate document converters based on file type."""
+class ConverterManager:
+    """Manages registration and retrieval of document converters with singleton pattern."""
+    _instance = None
+
+    def __new__(cls):
+        """Singleton pattern to ensure only one manager instance exists."""
+        if cls._instance is None:
+            cls._instance = super(ConverterManager, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
 
     def __init__(self):
-        self.converter_manager = ConverterManager()
-        self._register_default_converters()
+        """Initialize the converter registry."""
+        if not self._initialized:
+            self._converters = {
+                # Local converters
+                "local.txt": TextFileToDocument,
+                "local.pdf": PyPDFToDocument,
+                "local.docx": DOCXToDocument,
+                "local.html": HTMLToDocument,
+                "local.htm": HTMLToDocument,
+                "local.md": MarkdownToDocument,
+                "local.json": JSONConverter,
+                "local.csv": CSVToDocument,
+                "local.pptx": PPTXToDocument,
+                "local.tika": TikaDocumentConverter,
+                # Provider-specific converters
+                "azure": AzureOCRDocumentConverter,
+                "unstructured": UnstructuredFileConverter,
+            }
+            self._initialized = True
 
-    def _register_default_converters(self):
-        """Register default converters."""
-        self.converter_manager.register_converter(".txt", TextFileToDocument)
-        self.converter_manager.register_converter(".pdf", PyPDFToDocument)
-        self.converter_manager.register_converter(".docx", DOCXToDocument)
-        self.converter_manager.register_converter(".html", HTMLToDocument)
-        self.converter_manager.register_converter(".htm", HTMLToDocument)
-        self.converter_manager.register_converter(".md", MarkdownToDocument)
-        self.converter_manager.register_converter(".json", JSONConverter)
-        self.converter_manager.register_converter(".csv", CSVToDocument)
-        self.converter_manager.register_converter(".pptx", PPTXToDocument)
+    def register_converter(self, key: str, converter_class) -> None:
+        """Register a converter class for a specific key."""
+        self._converters[key.lower()] = converter_class
 
-    def get_converter(self, file_path: Union[str, Path], provider="local", **kwargs):
+    def unregister_converter(self, key: str) -> None:
+        """Remove a converter from the registry."""
+        if key.lower() in self._converters:
+            del self._converters[key.lower()]
+
+    def get_converter(self, file_path: Union[str, Path], provider: str = "local", **kwargs):
         """
-        Get appropriate converter based on file extension.
+        Get appropriate converter based on file extension and provider.
 
         Args:
             file_path: Path to the file that needs to be converted
+            provider: Provider to use for conversion ("local", "azure", "unstructured")
             **kwargs: Additional arguments to pass to the converter
 
         Returns:
             Appropriate converter instance
 
         Raises:
-            ValueError: If file type is not supported
+            ValueError: If provider or file type is not supported
         """
         if provider == "local":
             if isinstance(file_path, str):
                 file_path = Path(file_path)
 
             file_extension = file_path.suffix.lower()
+            converter_key = f"local{file_extension}"
 
-            # Get converter class from manager
-            converter_class = self.converter_manager.get_converter(
-                file_extension)
-
-            # If no specific converter found, fallback to Tika
+            converter_class = self._converters.get(converter_key)
             if converter_class is None:
                 return TikaDocumentConverter(**kwargs)
 
             return converter_class(**kwargs)
-        elif provider == "azure":
-            return AzureOCRDocumentConverter(**kwargs)
-        elif provider == "unstructured":
-            return UnstructuredFileConverter(**kwargs)
 
-# converter_manager.py
+        elif provider in self._converters:
+            return self._converters[provider](**kwargs)
 
+        else:
+            raise ValueError(f"Unsupported provider: {provider}")
 
-class ConverterManager:
-    """Manages registration and retrieval of document converters."""
-
-    def __init__(self):
-        self._converters = {}
-
-    def register_converter(self, extension: str, converter_class):
-        """Register a converter class for a specific file extension."""
-        self._converters[extension.lower()] = converter_class
-
-    def get_converter(self, extension: str):
-        """Retrieve a converter class for a specific file extension."""
-        return self._converters.get(extension.lower())
+    def list_available_converters(self) -> list:
+        """List all registered converter types."""
+        return list(self._converters.keys())
