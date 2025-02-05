@@ -38,7 +38,7 @@ class RAGPipeline:
         print(generator)
         retriever = RetrieverManager().get_retriever(
             "embedding", self.document_store, embedder)
-        converter = ConverterManager().get_converter("0038-WS2021-D30-MSG-1537.txt")
+        converter = ConverterManager().get_converter("new.pdf")
 
         # Initialize the pipeline
         self.indexing = Pipeline()
@@ -61,7 +61,7 @@ class RAGPipeline:
         Image(filename='indexing.png')
 
         self.indexing.run(
-            {"converter": {"sources": [Path("0038-WS2021-D30-MSG-1537.txt")]}})
+            {"converter": {"sources": [Path("new.pdf")]}})
 
         template = """
         Given the following information, answer the question.
@@ -130,7 +130,7 @@ class RAGChatPipeline:
         print(generator)
         retriever = RetrieverManager().get_retriever(
             "embedding", self.document_store, embedder)
-        converter = ConverterManager().get_converter("0038-WS2021-D30-MSG-1537.txt")
+        converter = ConverterManager().get_converter("new.pdf")
 
         # Initialize the pipeline
         self.indexing = Pipeline()
@@ -153,7 +153,7 @@ class RAGChatPipeline:
         Image(filename='indexing.png')
 
         self.indexing.run(
-            {"converter": {"sources": [Path("0038-WS2021-D30-MSG-1537.txt")]}})
+            {"converter": {"sources": [Path("new.pdf")]}})
 
         template = """
         Given the following information, answer the question.

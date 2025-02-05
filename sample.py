@@ -18,7 +18,7 @@ rag_pipeline = RAGPipeline(
     llm_provider="openai",         # Add these parameters
     embedding_model="malenia1/ternary-weight-embedding",
     llm_model="qwen/qwen-2.5-7b-instruct",
-    api_key="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",
+    api_key="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",
     base_url="https://openrouter.ai/api/v1")
-question = "输出内容的标题, 著作者, 文号以及日期"
+question = "孤独症应该如何评估"
 print(rag_pipeline.run(question))

@@ -50,6 +50,8 @@ class ConverterManager:
 
     def __init__(self):
         """Initialize the converter registry."""
+        if not hasattr(self, '_initialized'):
+            self._initialized = False
         if not self._initialized:
             self._converters = {
                 # Local converters
