@@ -50,7 +50,7 @@ rag_pipeline = RAGPipeline(
     generator_type="openai",         # Add these parameters
     embedding_model="malenia1/ternary-weight-embedding",
     llm_model="meta-llama/llama-3.1-70b-instruct:free",
-    api_key="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",
+    api_key="{{API_KEY}}",
     base_url="https://openrouter.ai/api/v1")
 question = "What preservatives are allowed in bakery products"
 print(rag_pipeline.run(question))
