@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Type, Optional, Literal, Any
+from typing import Callable, Dict, Optional, Literal
 from dataclasses import dataclass
 
 from haystack.components.generators import (
@@ -29,6 +29,7 @@ class GeneratorConfig:
     max_tokens: Optional[int] = None
     top_k: Optional[int] = None
     top_p: Optional[float] = None
+    streaming_callback: Optional[Callable] = None
 
 
 class GeneratorFactory(ABC):
@@ -48,18 +49,15 @@ class GeneratorFactory(ABC):
 class AzureGeneratorFactory(GeneratorFactory):
     def create_chat_generator(self, config: GeneratorConfig) -> AzureOpenAIChatGenerator:
         return AzureOpenAIChatGenerator(
-            model=config.model_name,
             api_key=config.api_key,
-            temperature=config.temperature,
-            max_tokens=config.max_tokens,
+            streaming_callback=config.streaming_callback
         )
 
     def create_completion_generator(self, config: GeneratorConfig) -> AzureOpenAIGenerator:
+
         return AzureOpenAIGenerator(
-            model=config.model_name,
             api_key=config.api_key,
-            temperature=config.temperature,
-            max_tokens=config.max_tokens,
+            streaming_callback=config.streaming_callback
         )
 
 
@@ -68,14 +66,16 @@ class HuggingFaceAPIGeneratorFactory(GeneratorFactory):
         return HuggingFaceAPIChatGenerator(
             api_type=HFGenerationAPIType.SERVERLESS_INFERENCE_API,
             api_params={"model": config.model_name},
-            token=Secret.from_token(config.api_key)
+            token=Secret.from_token(config.api_key),
+            streaming_callback=config.streaming_callback
         )
 
     def create_completion_generator(self, config: GeneratorConfig) -> HuggingFaceAPIGenerator:
         return HuggingFaceAPIGenerator(
             api_type=HFGenerationAPIType.SERVERLESS_INFERENCE_API,
             api_params={"model": config.model_name},
-            token=Secret.from_token(config.api_key)
+            token=Secret.from_token(config.api_key),
+            streaming_callback=config.streaming_callback
         )
 
 
@@ -83,19 +83,13 @@ class HuggingFaceLocalGeneratorFactory(GeneratorFactory):
     def create_chat_generator(self, config: GeneratorConfig) -> HuggingFaceLocalChatGenerator:
         return HuggingFaceLocalChatGenerator(
             model=config.model_name,
-            temperature=config.temperature,
-            max_tokens=config.max_tokens,
-            top_k=config.top_k,
-            top_p=config.top_p,
+            streaming_callback=config.streaming_callback
         )
 
     def create_completion_generator(self, config: GeneratorConfig) -> HuggingFaceLocalGenerator:
         return HuggingFaceLocalGenerator(
             model=config.model_name,
-            temperature=config.temperature,
-            max_tokens=config.max_tokens,
-            top_k=config.top_k,
-            top_p=config.top_p,
+            streaming_callback=config.streaming_callback
         )
 
 
@@ -104,14 +98,16 @@ class OpenAIGeneratorFactory(GeneratorFactory):
         return OpenAIChatGenerator(
             model=config.model_name,
             api_base_url=config.api_base_url,
-            api_key=Secret.from_token(config.api_key)
+            api_key=Secret.from_token(config.api_key),
+            streaming_callback=config.streaming_callback,
         )
 
     def create_completion_generator(self, config: GeneratorConfig) -> OpenAIGenerator:
         return OpenAIGenerator(
             model=config.model_name,
             api_base_url=config.api_base_url,
-            api_key=Secret.from_token(config.api_key)
+            api_key=Secret.from_token(config.api_key),
+            streaming_callback=config.streaming_callback,
         )
 
 

@@ -1,3 +1,8 @@
+from .converter import ConverterManager
+from .retriever import RetrieverManager
+from .generator import GeneratorManager, GeneratorConfig
+from .embedder import EmbedderManager
+
 from haystack.components.writers import DocumentWriter
 from haystack.components.preprocessors import DocumentCleaner, DocumentSplitter
 from haystack.document_stores.in_memory import InMemoryDocumentStore
@@ -6,11 +11,6 @@ from IPython.display import Image
 from pathlib import Path
 from haystack.components.builders import PromptBuilder
 from haystack.components.retrievers.in_memory import InMemoryEmbeddingRetriever
-
-from .converter import ConverterManager
-from .retriever import RetrieverManager
-from .generator import GeneratorManager, GeneratorConfig
-from .embedder import EmbedderManager
 
 
 class RAGPipeline:
