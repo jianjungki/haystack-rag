@@ -253,7 +253,7 @@ ragas==0.1.16
 ragas-haystack==1.0.1
 rank-bm25==0.2.2
 RapidFuzz==3.10.1
-ray==2.38.0
+ray==2.43.0
 referencing==0.35.1
 regex==2024.9.11
 requests==2.32.3
