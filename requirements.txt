@@ -27,4 +27,3 @@ ftfy>=6.1.1
 fastapi>=0.103.1
 uvicorn>=0.23.2
 azure-cognitiveservices-vision-computervision>=0.9.0
-clip-ViT-B-32
