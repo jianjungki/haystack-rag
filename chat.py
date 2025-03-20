@@ -1,34 +1,38 @@
-import os
-from typing import List
-
-from haystack.document_stores.in_memory import InMemoryDocumentStore
-
-from haystack.components.retrievers.in_memory import InMemoryEmbeddingRetriever
 from haystack.components.preprocessors import DocumentCleaner, DocumentSplitter
 from haystack import Pipeline
-from IPython.display import Image
 
 from haystack.components.builders import PromptBuilder
 from haystack.components.writers import DocumentWriter
 
 from rag.converter import ConverterManager
 from rag.retriever import RetrieverManager
+from rag.store import StoreManager
 from rag.generator import GeneratorManager, GeneratorConfig
 from rag.embedder import EmbedderManager
+
+from rag.evaluator import EvaluatorManager
 
 
 import chainlit as cl
 
+import nltk
+
+nltk.download('punkt_tab')
+
 
 @cl.on_chat_start
 async def on_chat_start():
+    app_user = cl.user_session.get("user")
+    await cl.Message(f"Hello {app_user.identifier}").send()
     files = None
 
     # Wait for the user to upload a file
     while files == None:
         files = await cl.AskFileMessage(
-            content="Please upload a text file to begin!",
-            accept=["text/plain"],
+            content="Please upload a file to begin!",
+            accept=["text/plain",
+                    "application/pdf",
+                    "text/html"],
             max_size_mb=20,
             timeout=180,
         ).send()
@@ -38,7 +42,7 @@ async def on_chat_start():
     await msg.send()
 
     # Initialize document store and components
-    document_store = InMemoryDocumentStore()
+    document_store = StoreManager().get_store("memory")
 
     # Setup embedder
     embedder = EmbedderManager().get_embedder(
@@ -54,7 +58,7 @@ async def on_chat_start():
     indexing.add_component("converter", converter)
     indexing.add_component("cleaner", DocumentCleaner())
     indexing.add_component("splitter", DocumentSplitter(
-        split_by="sentence", split_length=1))
+        split_by="period", split_length=1))
     indexing.add_component("doc_embedder", embedder)
     indexing.add_component("writer", DocumentWriter(document_store))
 
@@ -65,13 +69,14 @@ async def on_chat_start():
 
     # Run indexing
     await cl.Message(content=f"Indexing `{file.name}`...").send()
+    print(f"Indexing `{file.path}`...")
     indexing.run({"converter": {"sources": [file.path]}})
 
     # Setup LLM and RAG pipeline
     llm_config = GeneratorConfig(
-        api_base_url="https://openrouter.ai/api/v1",
-        model_name="meta-llama/llama-3.1-8b-instruct:free",
-        api_key="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",
+        api_base_url="https://api.siliconflow.cn/v1",
+        model_name="Qwen/Qwen2.5-7B-Instruct",
+        api_key="sk-aqilqiwnnwgdbzvqyriehstlzluawydzuimomxwvmlqfgfzk",
         temperature=0.5,
         max_tokens=4096
     )
@@ -90,7 +95,10 @@ async def on_chat_start():
         Answer:
     """
     prompt_builder = PromptBuilder(template=template)
-    retriever = InMemoryEmbeddingRetriever(document_store=document_store)
+    retriever = RetrieverManager().get_retriever(
+        "embedding",
+        document_store=document_store, embedding_model="malenia1/ternary-weight-embedding")
+
     text_embedder = EmbedderManager().get_embedder(
         "sentence_transformer",
         "text",
@@ -104,10 +112,20 @@ async def on_chat_start():
     rag_pipeline.add_component("prompt_builder", prompt_builder)
     rag_pipeline.add_component("llm", generator)
 
+    eval_pipeline = Pipeline()
+    eval_pipeline.add_component(
+        "doc_mrr_evaluator", EvaluatorManager().get_evaluator("mmr"))
+    eval_pipeline.add_component(
+        "faithfulness", EvaluatorManager().get_evaluator("faithfulness"))
+    eval_pipeline.add_component("sas_evaluator",
+                                EvaluatorManager().get_evaluator("semantic_answer_similarity",
+                                                                 model="sentence-transformers/all-MiniLM-L6-v2"))
+
     rag_pipeline.connect("text_embedder.embedding",
                          "retriever.query_embedding")
     rag_pipeline.connect("retriever", "prompt_builder.documents")
     rag_pipeline.connect("prompt_builder", "llm")
+    rag_pipeline.connect("llm", "evaluator")
 
     # Store pipeline in session
     cl.user_session.set("chain", rag_pipeline)
@@ -128,3 +146,15 @@ async def main(message: cl.Message):
     )
 
     await cl.Message(content=res["llm"]["replies"][0]).send()
+
+
+@cl.password_auth_callback
+def auth_callback(username: str, password: str):
+    # Fetch the user matching username from your database
+    # and compare the hashed password with the value stored in the database
+    if (username, password) == ("admin", "admin"):
+        return cl.User(
+            identifier="admin", metadata={"role": "admin", "provider": "credentials"}
+        )
+    else:
+        return None

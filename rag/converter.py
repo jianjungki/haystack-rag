@@ -17,8 +17,11 @@
 | [UnstructuredFileConverter](https://docs.haystack.deepset.ai/docs/unstructuredfileconverter "https://docs.haystack.deepset.ai/docs/unstructuredfileconverter") | Converts text files and directories to a document.                                                            |
 '''
 
-from typing import Union
+from typing import Union, Dict, List
 from pathlib import Path
+import mimetypes
+import magic
+import logging
 
 from haystack.components.converters import (
     TextFileToDocument,
@@ -31,15 +34,40 @@ from haystack.components.converters import (
     CSVToDocument,
     PPTXToDocument,
     TextFileToDocument,
+    PDFMinerToDocument,
 )
 
 from haystack.components.converters import AzureOCRDocumentConverter
 from haystack_integrations.components.converters.unstructured import UnstructuredFileConverter
 
+# 导入自定义图像转换器
+try:
+    from rag.image_converter import ImageToDocument
+    HAS_IMAGE_CONVERTER = True
+except ImportError:
+    HAS_IMAGE_CONVERTER = False
+
+logger = logging.getLogger(__name__)
+
 
 class ConverterManager:
     """Manages registration and retrieval of document converters with singleton pattern."""
     _instance = None
+
+    # 支持的文件类型和扩展名的映射
+    FILE_TYPE_EXTENSIONS = {
+        "text": [".txt", ".text"],
+        "pdf": [".pdf"],
+        "document": [".doc", ".docx", ".odt"],
+        "spreadsheet": [".xls", ".xlsx", ".ods", ".csv"],
+        "presentation": [".ppt", ".pptx", ".odp"],
+        "html": [".html", ".htm"],
+        "markdown": [".md", ".markdown"],
+        "json": [".json"],
+        "xml": [".xml"],
+        "code": [".py", ".js", ".java", ".cpp", ".cs", ".php", ".rb", ".go", ".rs", ".ts"],
+        "image": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp", ".svg"],
+    }
 
     def __new__(cls):
         """Singleton pattern to ensure only one manager instance exists."""
@@ -54,9 +82,10 @@ class ConverterManager:
             self._initialized = False
         if not self._initialized:
             self._converters = {
-                # Local converters
+                # 基本转换器
                 "local.txt": TextFileToDocument,
                 "local.pdf": PyPDFToDocument,
+                "local.pdf_miner": PDFMinerToDocument,  # 高级PDF处理
                 "local.docx": DOCXToDocument,
                 "local.html": HTMLToDocument,
                 "local.htm": HTMLToDocument,
@@ -65,10 +94,15 @@ class ConverterManager:
                 "local.csv": CSVToDocument,
                 "local.pptx": PPTXToDocument,
                 "local.tika": TikaDocumentConverter,
-                # Provider-specific converters
+                # 特定提供商的转换器
                 "azure": AzureOCRDocumentConverter,
                 "unstructured": UnstructuredFileConverter,
             }
+
+            # 如果图像转换器可用，添加它
+            if HAS_IMAGE_CONVERTER:
+                self._converters["image"] = ImageToDocument
+
             self._initialized = True
 
     def register_converter(self, key: str, converter_class) -> None:
@@ -80,13 +114,98 @@ class ConverterManager:
         if key.lower() in self._converters:
             del self._converters[key.lower()]
 
-    def get_converter(self, file_path: Union[str, Path], provider: str = "local", **kwargs):
+    def detect_file_type(self, file_path: Union[str, Path]) -> str:
+        """
+        检测文件类型，返回适当的处理器类型。
+
+        Args:
+            file_path: 文件路径
+
+        Returns:
+            文件类型标识符
+        """
+        file_path = Path(file_path) if isinstance(
+            file_path, str) else file_path
+        file_extension = file_path.suffix.lower()
+
+        # 使用MIME类型和magic进行更准确的检测
+        mime_type = None
+        try:
+            mime_type, _ = mimetypes.guess_type(str(file_path))
+            # 尝试使用python-magic获取更准确的MIME类型
+            try:
+                mime_from_magic = magic.from_file(str(file_path), mime=True)
+                if mime_from_magic:
+                    mime_type = mime_from_magic
+            except:
+                pass
+        except:
+            pass
+
+        # 基于MIME类型检测
+        if mime_type:
+            if 'image/' in mime_type:
+                return "image"
+            elif 'pdf' in mime_type:
+                # 检查是否为扫描PDF，这可能需要OCR
+                try:
+                    if 'image' in mime_type or 'scan' in mime_type:
+                        return "azure"  # 使用OCR处理扫描的PDF
+                except:
+                    pass
+                return "local.pdf"
+            elif 'msword' in mime_type or 'officedocument.wordprocessingml' in mime_type:
+                return "local.docx"
+            elif 'officedocument.spreadsheetml' in mime_type or 'csv' in mime_type:
+                return "local.csv"
+            elif 'officedocument.presentationml' in mime_type:
+                return "local.pptx"
+            elif 'html' in mime_type:
+                return "local.html"
+            elif 'text/plain' in mime_type:
+                return "local.txt"
+            elif 'text/markdown' in mime_type:
+                return "local.md"
+            elif 'application/json' in mime_type:
+                return "local.json"
+
+        # 基于文件扩展名检测
+        for file_type, extensions in self.FILE_TYPE_EXTENSIONS.items():
+            if file_extension in extensions:
+                if file_type == "image":
+                    return "image"
+                elif file_type == "pdf":
+                    return "local.pdf"
+                elif file_type == "document":
+                    return "local.docx"
+                elif file_type == "spreadsheet":
+                    return "local.csv"
+                elif file_type == "presentation":
+                    return "local.pptx"
+                elif file_type == "html":
+                    return "local.html"
+                elif file_type == "markdown":
+                    return "local.md"
+                elif file_type == "json":
+                    return "local.json"
+                elif file_type == "text":
+                    return "local.txt"
+
+        # 如果无法确定，尝试使用Tika或者Unstructured
+        try:
+            # 先尝试不那么重的Tika
+            return "local.tika"
+        except:
+            # 然后尝试Unstructured
+            return "unstructured"
+
+    def get_converter(self, file_path: Union[str, Path], provider: str = "auto", **kwargs):
         """
         Get appropriate converter based on file extension and provider.
 
         Args:
             file_path: Path to the file that needs to be converted
-            provider: Provider to use for conversion ("local", "azure", "unstructured")
+            provider: Provider to use for conversion ("auto", "local", "azure", "unstructured", "image")
             **kwargs: Additional arguments to pass to the converter
 
         Returns:
@@ -95,7 +214,34 @@ class ConverterManager:
         Raises:
             ValueError: If provider or file type is not supported
         """
-        if provider == "local":
+        if provider == "auto":
+            # 自动检测最适合的转换器
+            detected_type = self.detect_file_type(file_path)
+
+            # 检查是否为图像类型
+            if detected_type == "image" and HAS_IMAGE_CONVERTER:
+                return self._converters["image"](**kwargs)
+
+            # 检查是否需要特殊处理器
+            if detected_type in ["azure", "unstructured"]:
+                return self._converters[detected_type](**kwargs)
+
+            # 否则使用本地转换器
+            if detected_type.startswith("local."):
+                converter_key = detected_type
+                converter_class = self._converters.get(converter_key)
+
+                if converter_class:
+                    return converter_class(**kwargs)
+
+            # 如果没有合适的转换器，尝试Unstructured
+            try:
+                return self._converters["unstructured"](**kwargs)
+            except:
+                # 最后尝试TikaDocumentConverter
+                return TikaDocumentConverter(**kwargs)
+
+        elif provider == "local":
             if isinstance(file_path, str):
                 file_path = Path(file_path)
 
@@ -108,6 +254,9 @@ class ConverterManager:
 
             return converter_class(**kwargs)
 
+        elif provider == "image" and HAS_IMAGE_CONVERTER:
+            return self._converters["image"](**kwargs)
+
         elif provider in self._converters:
             return self._converters[provider](**kwargs)
 
@@ -117,3 +266,12 @@ class ConverterManager:
     def list_available_converters(self) -> list:
         """List all registered converter types."""
         return list(self._converters.keys())
+
+    def get_supported_file_types(self) -> Dict[str, List[str]]:
+        """
+        获取支持的文件类型和对应的扩展名
+
+        Returns:
+            文件类型及其扩展名的字典
+        """
+        return self.FILE_TYPE_EXTENSIONS
